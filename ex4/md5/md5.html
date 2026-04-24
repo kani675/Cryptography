@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MD5 Step by Step</title>
+    <style>
+        body { font-family: Arial; background: #f0f2f5; padding: 20px; }
+        .box { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        textarea { width: 100%; height: 80px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; margin-top: 10px; background: #d32f2f; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        pre { background: #1e1e1e; color: #d4d4d4; padding: 15px; height: 450px; overflow-y: auto; font-size: 13px; border-radius: 5px; }
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>MD5 Hash Implementation</h2>
+    <textarea id="input">abc</textarea>
+    <button onclick="runMD5()">Generate Hash</button>
+    <pre id="output"></pre>
+</div>
+
+<script>
+// MD5 Constants and Helper Functions
+const MASK = 0xFFFFFFFF;
+
+// Sine-based constants for MD5 (64 values)
+const T = Array.from({length: 64}, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296));
+
+// Left rotation for 32-bit words
+function rotl(x, n) {
+    return ((x << n) | (x >>> (32 - n))) & MASK;
+}
+
+// Convert number to hex string with padding
+function toHex(n) {
+    return (n >>> 0).toString(16).padStart(8, '0');
+}
+
+// MD5 uses Little-Endian for the final output
+function formatLittleEndian(n) {
+    let hex = toHex(n);
+    return hex.match(/../g).reverse().join('');
+}
+
+function runMD5() {
+    let out = "";
+    const log = (m) => out += m + "\n";
+    let msg = document.getElementById("input").value;
+    let data = Array.from(new TextEncoder().encode(msg));
+
+    log("Input Message: " + msg);
+
+    // 1. Initial State (A, B, C, D)
+    let h = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
+    
+    // 2. Padding
+    let bitLen = data.length * 8;
+    data.push(0x80); // Append '1' bit
+    while ((data.length % 64) !== 56) data.push(0); // Pad with '0' bits
+
+    // Append length as 64-bit Little-Endian
+    for (let i = 0; i < 8; i++) {
+        data.push((bitLen >>> (i * 8)) & 0xff);
+    }
+    log("Message Padded to: " + data.length + " bytes");
+
+    // 3. Process each 512-bit (64-byte) block
+    for (let offset = 0; offset < data.length; offset += 64) {
+        let w = new Uint32Array(16);
+        for (let i = 0; i < 16; i++) {
+            let j = offset + (i * 4);
+            w[i] = data[j] | (data[j+1] << 8) | (data[j+2] << 16) | (data[j+3] << 24);
+        }
+
+        let [a, b, c, d] = h;
+
+        // 4. Main Compression Loop (64 Rounds)
+        for (let i = 0; i < 64; i++) {
+            let f, g;
+            if (i < 16) {
+                f = (b & c) | ((~b) & d);
+                g = i;
+            } else if (i < 32) {
+                f = (d & b) | ((~d) & c);
+                g = (5 * i + 1) % 16;
+            } else if (i < 48) {
+                f = b ^ c ^ d;
+                g = (3 * i + 5) % 16;
+            } else {
+                f = c ^ (b | (~d));
+                g = (7 * i) % 16;
+            }
+
+            // Rotation amounts (Standard MD5 table)
+            const s = [
+                7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+                5,  9, 14, 20, 5,  9, 14, 20, 5,  9, 14, 20, 5,  9, 14, 20,
+                4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+                6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+            ];
+
+            let temp = (a + f + T[i] + w[g]) & MASK;
+            a = d;
+            d = c;
+            c = b;
+            b = (b + rotl(temp, s[i])) & MASK;
+
+            if(i < 4 || i === 63) {
+                log(`Round ${i.toString().padStart(2,'0')}: a=${toHex(a)} b=${toHex(b)} c=${toHex(c)} d=${toHex(d)} T=${toHex(T[i])}`);
+            }
+            if(i === 4) log("... [rounds 5-62 omitted] ...");
+        }
+
+        // Add block result to state
+        h[0] = (h[0] + a) & MASK;
+        h[1] = (h[1] + b) & MASK;
+        h[2] = (h[2] + c) & MASK;
+        h[3] = (h[3] + d) & MASK;
+    }
+
+    // 5. Final Output (MD5 concatenates A,B,C,D in Little-Endian)
+    let finalHash = h.map(formatLittleEndian).join('');
+    log("\nFinal MD5 Hash:");
+    log(finalHash);
+
+    document.getElementById("output").textContent = out;
+}
+</script>
+</body>
+</html>

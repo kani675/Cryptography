@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>S-DES & AES-128 Encrypt / Decrypt</title>
+<style>
+body{
+  font-family: Consolas, monospace;
+  background:#f4f7fb;
+  padding:20px;
+}
+.container{
+  max-width:1000px;
+  margin:auto;
+  background:#fff;
+  padding:20px;
+  border-radius:10px;
+  box-shadow:0 4px 15px rgba(0,0,0,.1);
+}
+input,select,button{
+  width:100%;
+  padding:10px;
+  margin:6px 0;
+}
+button{
+  font-weight:bold;
+  cursor:pointer;
+}
+.enc{background:#2ecc71;color:#fff}
+.dec{background:#e74c3c;color:#fff}
+.output{
+  background:#eef2f7;
+  padding:15px;
+  white-space:pre-wrap;
+  margin-top:10px;
+  font-size:13px;
+}
+h1{text-align:center}
+.radio-group {
+  display: flex;
+  margin: 10px 0;
+}
+.radio-group input[type="radio"] {
+  width: auto;
+  margin-right: 10px;
+}
+.radio-group label {
+  margin-right: 20px;
+  font-weight: bold;
+  cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+<h1>S-DES & AES-128 Visualizer</h1>
+
+<div class="radio-group">
+  <input type="radio" id="sdes" name="algo" value="sdes" checked>
+  <label for="sdes">S-DES</label>
+  <input type="radio" id="aes" name="algo" value="aes">
+  <label for="aes">AES-128</label>
+</div>
+
+<input id="text" placeholder="S-DES: 8-bit binary (10110100) | AES: hex (2b7e151628aed2a6abf7158809cf4f3c)">
+<input id="key" placeholder="S-DES: 10-bit binary (1010000010) | AES: 128-bit hex (2b7e151628aed2a6abf7158809cf4f3c)">
+
+<button class="enc" onclick="encrypt()">Encrypt</button>
+<button class="dec" onclick="decrypt()">Decrypt</button>
+
+<div class="output" id="out"></div>
+</div>
+
+<script>
+// ================= COMMON FUNCTIONS =================
+function permute(b,t){ return t.map(i=>b[i-1]).join("") }
+function ls(b,n){ return b.slice(n)+b.slice(0,n) }
+function xor(a,b){ return a.split("").map((x,i)=>x^b[i]).join("") }
+
+// ================= S-DES TABLES =================
+const P10=[3,5,2,7,4,10,1,9,8,6]
+const P8=[6,3,7,4,8,5,10,9]
+const IP=[2,6,3,1,4,8,5,7]
+const IP_INV=[4,1,3,5,7,2,8,6]
+const EP=[4,1,2,3,2,3,4,1]
+const P4=[2,4,3,1]
+
+const S0=[
+ [1,0,3,2],
+ [3,2,1,0],
+ [0,2,1,3],
+ [3,1,3,2]
+]
+const S1=[
+ [0,1,2,3],
+ [2,0,1,3],
+ [3,0,1,0],
+ [2,1,0,3]
+]
+
+function sbox(bits,box){
+  let r=parseInt(bits[0]+bits[3],2)
+  let c=parseInt(bits[1]+bits[2],2)
+  return box[r][c].toString(2).padStart(2,"0")
+}
+
+// ================= KEY GEN =================
+function genKeys(key,o){
+  o.push("Key = "+key)
+  let p10=permute(key,P10)
+  o.push("P10 = "+p10)
+
+  let L=p10.slice(0,5), R=p10.slice(5)
+  L=ls(L,1); R=ls(R,1)
+  let K1=permute(L+R,P8)
+
+  L=ls(L,2); R=ls(R,2)
+  let K2=permute(L+R,P8)
+
+  o.push("K1 = "+K1)
+  o.push("K2 = "+K2+"\n")
+  return [K1,K2]
+}
+
+// ================= FK FUNCTION =================
+function fk(bits,key,o){
+  let L=bits.slice(0,4), R=bits.slice(4)
+  o.push("L = "+L+"  R = "+R)
+
+  let ep=permute(R,EP)
+  o.push("EP(R) = "+ep)
+
+  let x=xor(ep,key)
+  o.push("XOR with key = "+x)
+
+  let s0out=sbox(x.slice(0,4),S0)
+  let s1out=sbox(x.slice(4),S1)
+  let sb=s0out+s1out
+  o.push("S0 = "+s0out+" S1 = "+s1out+" combined = "+sb)
+
+  let p4out=permute(sb,P4)
+  o.push("P4 = "+p4out)
+
+  let newL=xor(L,p4out)
+  o.push("L XOR P4 = "+newL)
+
+  return newL+R
+}
+
+// ================= S-DES ENCRYPT =================
+function sdesEncrypt(pt,key){
+  let o=["S-DES ENCRYPT\n"]
+  let [K1,K2]=genKeys(key,o)
+
+  let ip=permute(pt,IP)
+  o.push("IP = "+ip+"\n")
+
+  o.push("--- Round 1 (fK with K1) ---")
+  let r1=fk(ip,K1,o)
+  o.push("After fK1 = "+r1+"\n")
+
+  o.push("--- SWAP ---")
+  let sw=r1.slice(4)+r1.slice(0,4)
+  o.push("After SWAP = "+sw+"\n")
+
+  o.push("--- Round 2 (fK with K2) ---")
+  let r2=fk(sw,K2,o)
+  o.push("After fK2 = "+r2+"\n")
+
+  let ct=permute(r2,IP_INV)
+  o.push("IP⁻¹ = "+ct)
+  o.push("\nCipher Text = "+ct)
+  return o.join("\n")
+}
+
+function sdesDecrypt(ct, key){
+  let o = ["S-DES DECRYPT\n"]
+  let [K1, K2] = genKeys(key, o)
+
+  let ip = permute(ct, IP)
+  o.push("IP = " + ip + "\n")
+
+  o.push("--- Round 1 (fK with K2) ---")
+  let r1 = fk(ip, K2, o)
+  o.push("After fK2 = " + r1 + "\n")
+
+  o.push("--- SWAP ---")
+  let sw = r1.slice(4) + r1.slice(0,4)
+  o.push("After SWAP = " + sw + "\n")
+
+  o.push("--- Round 2 (fK with K1) ---")
+  let r2 = fk(sw, K1, o)
+  o.push("After fK1 = " + r2 + "\n")
+
+  let pt = permute(r2, IP_INV)
+  o.push("IP⁻¹ = " + pt)
+  o.push("\nPlain Text = " + pt)
+
+  return o.join("\n")
+}
+
+// ================= AES-128 FULL IMPLEMENTATION =================
+const AES_SBOX = [
+  0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
+  0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
+  0xb7, 0xfd, 0x93, 0x26, 0x36, 0x3f, 0xf7, 0xcc, 0x34, 0xa5, 0xe5, 0xf1, 0x71, 0xd8, 0x31, 0x15,
+  0x04, 0xc7, 0x23, 0xc3, 0x18, 0x96, 0x05, 0x9a, 0x07, 0x12, 0x80, 0xe2, 0xeb, 0x27, 0xb2, 0x75,
+  0x09, 0x83, 0x2c, 0x1a, 0x1b, 0x6e, 0x5a, 0xa0, 0x52, 0x3b, 0xd6, 0xb3, 0x29, 0xe3, 0x2f, 0x84,
+  0x53, 0xd1, 0x00, 0xed, 0x20, 0xfc, 0xb1, 0x5b, 0x6a, 0xcb, 0xbe, 0x39, 0x4a, 0x4c, 0x58, 0xcf,
+  0xd0, 0xef, 0xaa, 0xfb, 0x43, 0x4d, 0x33, 0x85, 0x45, 0xf9, 0x02, 0x7f, 0x50, 0x3c, 0x9f, 0xa8,
+  0x51, 0xa3, 0x40, 0x8f, 0x92, 0x9d, 0x38, 0xf5, 0xbc, 0xb6, 0xda, 0x21, 0x10, 0xff, 0xf3, 0xd2,
+  0xcd, 0x0c, 0x13, 0xec, 0x5f, 0x97, 0x44, 0x17, 0xc4, 0xa7, 0x7e, 0x3d, 0x64, 0x5d, 0x19, 0x73,
+  0x60, 0x81, 0x4f, 0xdc, 0x22, 0x2a, 0x90, 0x88, 0x46, 0xee, 0xb8, 0x14, 0xde, 0x5e, 0x0b, 0xdb,
+  0xe0, 0x32, 0x3a, 0x0a, 0x49, 0x06, 0x24, 0x5c, 0xc2, 0xd3, 0xac, 0x62, 0x91, 0x95, 0xe4, 0x79,
+  0xe7, 0xc8, 0x37, 0x6d, 0x8d, 0xd5, 0x4e, 0xa9, 0x6c, 0x56, 0xf4, 0xea, 0x65, 0x7a, 0xae, 0x08,
+  0xba, 0x78, 0x25, 0x2e, 0x1c, 0xa6, 0xb4, 0xc6, 0xe8, 0xdd, 0x74, 0x1f, 0x4b, 0xbd, 0x8b, 0x8a,
+  0x70, 0x3e, 0xb5, 0x66, 0x48, 0x03, 0xf6, 0x0e, 0x61, 0x35, 0x57, 0xb9, 0x86, 0xc1, 0x1d, 0x9e,
+  0xe1, 0xf8, 0x98, 0x11, 0x69, 0xd9, 0x8e, 0x94, 0x9b, 0x1e, 0x87, 0xe9, 0xce, 0x55, 0x28, 0xdf,
+  0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
+];
+
+const AES_INV_SBOX = [
+  0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
+  0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
+  0x54, 0x7b, 0x94, 0x32, 0xa6, 0xc2, 0x23, 0x3d, 0xee, 0x4c, 0x95, 0x0b, 0x42, 0xfa, 0xc3, 0x4e,
+  0x08, 0x2e, 0xa1, 0x66, 0x28, 0xd9, 0x24, 0xb2, 0x76, 0x5b, 0xa2, 0x49, 0x6d, 0x8b, 0xd1, 0x25,
+  0x72, 0xf8, 0xf6, 0x64, 0x86, 0x68, 0x98, 0x16, 0xd4, 0xa4, 0x5c, 0xcc, 0x5d, 0x65, 0xb6, 0x92,
+  0x6c, 0x70, 0x48, 0x50, 0xfd, 0xed, 0xb9, 0xda, 0x5e, 0x15, 0x46, 0x57, 0xa7, 0x8d, 0x9d, 0x84,
+  0x90, 0xd8, 0xab, 0x00, 0x8c, 0xbc, 0xd3, 0x0a, 0xf7, 0xe4, 0x58, 0x05, 0xb8, 0xb3, 0x45, 0x06,
+  0xd0, 0x2c, 0x1e, 0x8f, 0xca, 0x3f, 0x0f, 0x02, 0xc1, 0xaf, 0xbd, 0x03, 0x01, 0x13, 0x8a, 0x6b,
+  0x3a, 0x91, 0x11, 0x41, 0x4f, 0x67, 0xdc, 0xea, 0x97, 0xf2, 0xcf, 0xce, 0xf0, 0xb4, 0xe6, 0x73,
+  0x96, 0xac, 0x74, 0x22, 0xe7, 0xad, 0x35, 0x85, 0xe2, 0xf9, 0x37, 0xe8, 0x1c, 0x75, 0xdf, 0x6e,
+  0x47, 0xf1, 0x1a, 0x71, 0x1d, 0x29, 0xc5, 0x89, 0x6f, 0xb7, 0x62, 0x0e, 0xaa, 0x18, 0xbe, 0x1b,
+  0xfc, 0x56, 0x3e, 0x4b, 0xc6, 0xd2, 0x79, 0x20, 0x9a, 0xdb, 0xc0, 0xfe, 0x78, 0xcd, 0x5a, 0xf4,
+  0x1f, 0xdd, 0xa8, 0x33, 0x88, 0x07, 0xc7, 0x31, 0xb1, 0x12, 0x10, 0x59, 0x27, 0x80, 0xec, 0x5f,
+  0x60, 0x51, 0x7f, 0xa9, 0x19, 0xb5, 0x4a, 0x0d, 0x2d, 0xe5, 0x7a, 0x9f, 0x93, 0xc9, 0x9c, 0xef,
+  0xa0, 0xe0, 0x3b, 0x4d, 0xae, 0x2a, 0xf5, 0xb0, 0xc8, 0xeb, 0xbb, 0x3c, 0x83, 0x53, 0x99, 0x61,
+  0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d
+];
+
+const RCON = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36];
+
+function hexToBytes(s) {
+  s = s.replace(/\s+/g, '');
+  let bytes = [];
+  for (let i = 0; i < s.length; i += 2) {
+    bytes.push(parseInt(s.substr(i, 2), 16));
+  }
+  return bytes;
+}
+
+function bytesToHex(arr) {
+  return arr.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function galoisMult(a, b) {
+  let p = 0;
+  for (let i = 0; i < 8; i++) {
+    if (b & 1) p ^= a;
+    let hi = a & 0x80;
+    a <<= 1;
+    if (hi) a ^= 0x1b;
+    b >>= 1;
+  }
+  return p & 0xff;
+}
+
+function keyExpansion(key) {
+  let w = [];
+  for (let i = 0; i < 4; i++) {
+    w[i] = [key[4*i], key[4*i+1], key[4*i+2], key[4*i+3]];
+  }
+  
+  for (let i = 4; i < 44; i++) {
+    let temp = w[i-1].slice();
+    if (i % 4 === 0) {
+      temp = [temp[1], temp[2], temp[3], temp[0]];
+      temp = temp.map(b => AES_SBOX[b]);
+      temp[0] ^= RCON[(i/4)-1];
+    }
+    w[i] = w[i-4].map((b, j) => b ^ temp[j]);
+  }
+  return w;
+}
+
+function subBytes(state) {
+  return state.map(row => row.map(b => AES_SBOX[b]));
+}
+
+function invSubBytes(state) {
+  return state.map(row => row.map(b => AES_INV_SBOX[b]));
+}
+
+function shiftRows(state) {
+  let s = state.map(r => r.slice());
+  for (let r = 1; r < 4; r++) {
+    s[r] = s[r].slice(r).concat(s[r].slice(0, r));
+  }
+  return s;
+}
+
+function invShiftRows(state) {
+  let s = state.map(r => r.slice());
+  for (let r = 1; r < 4; r++) {
+    s[r] = s[r].slice(4-r).concat(s[r].slice(0, 4-r));
+  }
+  return s;
+}
+
+function mixColumns(state) {
+  let s = state.map(r => r.slice());
+  for (let c = 0; c < 4; c++) {
+    let a = [s[0][c], s[1][c], s[2][c], s[3][c]];
+    s[0][c] = galoisMult(0x02, a[0]) ^ galoisMult(0x03, a[1]) ^ a[2] ^ a[3];
+    s[1][c] = a[0] ^ galoisMult(0x02, a[1]) ^ galoisMult(0x03, a[2]) ^ a[3];
+    s[2][c] = a[0] ^ a[1] ^ galoisMult(0x02, a[2]) ^ galoisMult(0x03, a[3]);
+    s[3][c] = galoisMult(0x03, a[0]) ^ a[1] ^ a[2] ^ galoisMult(0x02, a[3]);
+  }
+  return s;
+}
+
+function invMixColumns(state) {
+  let s = state.map(r => r.slice());
+  for (let c = 0; c < 4; c++) {
+    let a = [s[0][c], s[1][c], s[2][c], s[3][c]];
+    s[0][c] = galoisMult(0x0e, a[0]) ^ galoisMult(0x0b, a[1]) ^ galoisMult(0x0d, a[2]) ^ galoisMult(0x09, a[3]);
+    s[1][c] = galoisMult(0x09, a[0]) ^ galoisMult(0x0e, a[1]) ^ galoisMult(0x0b, a[2]) ^ galoisMult(0x0d, a[3]);
+    s[2][c] = galoisMult(0x0d, a[0]) ^ galoisMult(0x09, a[1]) ^ galoisMult(0x0e, a[2]) ^ galoisMult(0x0b, a[3]);
+    s[3][c] = galoisMult(0x0b, a[0]) ^ galoisMult(0x0d, a[1]) ^ galoisMult(0x09, a[2]) ^ galoisMult(0x0e, a[3]);
+  }
+  return s;
+}
+
+function addRoundKey(state, w, round) {
+  let s = state.map(r => r.slice());
+  for (let c = 0; c < 4; c++) {
+    for (let r = 0; r < 4; r++) {
+      s[r][c] ^= w[round*4 + c][r];
+    }
+  }
+  return s;
+}
+
+function stateToString(state) {
+  let bytes = [];
+  for (let c = 0; c < 4; c++) {
+    for (let r = 0; r < 4; r++) {
+      bytes.push(state[r][c]);
+    }
+  }
+  return bytesToHex(bytes);
+}
+
+function bytesToState(bytes) {
+  let state = [[],[],[],[]];
+  for (let c = 0; c < 4; c++) {
+    for (let r = 0; r < 4; r++) {
+      state[r][c] = bytes[c*4 + r];
+    }
+  }
+  return state;
+}
+
+function aesEncrypt(plaintext, key) {
+  let o = [" AES-128 ENCRYPT\n"];
+  
+  let ptBytes = hexToBytes(plaintext);
+  let keyBytes = hexToBytes(key);
+  
+  if (ptBytes.length !== 16) {
+    return "Error: Plaintext must be 128 bits (32 hex chars)";
+  }
+  if (keyBytes.length !== 16) {
+    return "Error: Key must be 128 bits (32 hex chars)";
+  }
+  
+  o.push("Plaintext:  " + bytesToHex(ptBytes));
+  o.push("Key:        " + bytesToHex(keyBytes) + "\n");
+  
+  let w = keyExpansion(keyBytes);
+  o.push("Key expansion complete (11 round keys generated)\n");
+  
+  let state = bytesToState(ptBytes);
+  
+  o.push("Initial AddRoundKey");
+  state = addRoundKey(state, w, 0);
+  o.push("State: " + stateToString(state) + "\n");
+  
+  for (let round = 1; round <= 9; round++) {
+    o.push(`--- Round ${round} ---`);
+    
+    state = subBytes(state);
+    o.push("After SubBytes:    " + stateToString(state));
+    
+    state = shiftRows(state);
+    o.push("After ShiftRows:   " + stateToString(state));
+    
+    state = mixColumns(state);
+    o.push("After MixColumns:  " + stateToString(state));
+    
+    state = addRoundKey(state, w, round);
+    o.push("After AddRoundKey: " + stateToString(state) + "\n");
+  }
+  
+  o.push("--- Round 10 (Final) ---");
+  state = subBytes(state);
+  o.push("After SubBytes:    " + stateToString(state));
+  
+  state = shiftRows(state);
+  o.push("After ShiftRows:   " + stateToString(state));
+  
+  state = addRoundKey(state, w, 10);
+  o.push("After AddRoundKey: " + stateToString(state));
+  
+  let ciphertext = stateToString(state);
+  o.push("\nCiphertext: " + ciphertext);
+  
+  return o.join("\n");
+}
+
+function aesDecrypt(ciphertext, key) {
+  let o = ["AES-128 DECRYPT\n"];
+  
+  let ctBytes = hexToBytes(ciphertext);
+  let keyBytes = hexToBytes(key);
+  
+  if (ctBytes.length !== 16) {
+    return "Error: Ciphertext must be 128 bits (32 hex chars)";
+  }
+  if (keyBytes.length !== 16) {
+    return "Error: Key must be 128 bits (32 hex chars)";
+  }
+  
+  o.push("Ciphertext: " + bytesToHex(ctBytes));
+  o.push("Key:        " + bytesToHex(keyBytes) + "\n");
+  
+  let w = keyExpansion(keyBytes);
+  o.push("Key expansion complete (11 round keys generated)\n");
+  
+  let state = bytesToState(ctBytes);
+  
+  o.push("Initial AddRoundKey");
+  state = addRoundKey(state, w, 10);
+  o.push("State: " + stateToString(state) + "\n");
+  
+  o.push("--- Round 10 (First) ---");
+  state = invShiftRows(state);
+  o.push("After InvShiftRows: " + stateToString(state));
+  
+  state = invSubBytes(state);
+  o.push("After InvSubBytes:  " + stateToString(state));
+  
+  state = addRoundKey(state, w, 9);
+  o.push("After AddRoundKey:  " + stateToString(state) + "\n");
+  
+  for (let round = 8; round >= 1; round--) {
+    o.push(`--- Round ${10-round} ---`);
+    
+    state = invMixColumns(state);
+    o.push("After InvMixColumns: " + stateToString(state));
+    
+    state = invShiftRows(state);
+    o.push("After InvShiftRows:  " + stateToString(state));
+    
+    state = invSubBytes(state);
+    o.push("After InvSubBytes:   " + stateToString(state));
+    
+    state = addRoundKey(state, w, round);
+    o.push("After AddRoundKey:   " + stateToString(state) + "\n");
+  }
+  
+  let plaintext = stateToString(state);
+  o.push("Plaintext: " + plaintext);
+  
+  return o.join("\n");
+}
+
+// ================= MAIN FUNCTIONS =================
+function getAlgo() {
+  return document.querySelector('input[name="algo"]:checked').value;
+}
+
+function encrypt(){
+  let a=getAlgo()
+  let t=document.getElementById("text").value.trim()
+  let k=document.getElementById("key").value.trim()
+  let out = document.getElementById("out")
+  
+  try {
+    out.textContent = a=="sdes" ? sdesEncrypt(t,k) : aesEncrypt(t,k)
+  } catch(e) {
+    out.textContent = "Error: " + e.message
+  }
+}
+
+function decrypt(){
+  let a=getAlgo()
+  let t=document.getElementById("text").value.trim()
+  let k=document.getElementById("key").value.trim()
+  let out = document.getElementById("out")
+  
+  try {
+    out.textContent = a=="sdes" ? sdesDecrypt(t,k) : aesDecrypt(t,k)
+  } catch(e) {
+    out.textContent = "Error: " + e.message
+  }
+}
+</script>
+</body>
+</html>

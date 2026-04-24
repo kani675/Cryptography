@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Substitution Ciphers</title>
+
+    <style>
+        body {
+    background-color: #f0f8ff;  /* AliceBlue - light and soft */
+    font-family: Arial, sans-serif;
+    color: #333;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    width: 620px;
+    margin: auto;
+    margin-top: 30px;
+    padding: 25px;
+    background-color: #ffffff;  /* white for contrast */
+    border: 1px solid #87cefa;  /* light blue border */
+    border-radius: 10px;
+    box-shadow: 2px 2px 12px rgba(0,0,0,0.1); /* subtle shadow */
+}
+
+h2 {
+    text-align: center;
+    color: #4682b4;  /* steel blue */
+    margin-bottom: 20px;
+}
+
+textarea, input[type="text"] {
+    width: 100%;
+    margin-top: 5px;
+    padding: 8px;
+    border: 1px solid #87cefa;
+    border-radius: 6px;
+    background-color: #f8faff; /* very light blue */
+    color: #333;
+    font-size: 14px;
+}
+
+textarea {
+    height: 70px;
+}
+
+button {
+    margin-top: 15px;
+    padding: 8px 18px;
+    background-color: #4682b4;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+button:hover {
+    background-color: #5a9bd5;
+}
+
+#steps {
+    background: #f0f8ff;
+    padding: 10px;
+    white-space: pre-wrap;
+    border: 1px solid #87cefa;
+    margin-top: 10px;
+    font-size: 14px;
+    border-radius: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#result {
+    color: #228b22; /* dark green for result */
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Substitution Ciphers</h2>
+
+<div class="section">
+<label>Enter Text:</label>
+<textarea id="text"></textarea>
+</div>
+
+<div class="section">
+<label id="keyLabel">Key:</label>
+<input type="text" id="key">
+</div>
+
+<div class="section">
+<label>Select Cipher:</label><br>
+<input type="radio" name="cipher" value="caesar" checked onclick="updateUI()"> Caesar Cipher<br>
+<input type="radio" name="cipher" value="playfair" onclick="updateUI()"> Playfair Cipher<br>
+<input type="radio" name="cipher" value="hill" onclick="updateUI()"> Hill Cipher
+</div>
+
+<button onclick="encrypt()">Encrypt</button>
+<button onclick="decrypt()">Decrypt</button>
+
+<div class="section">
+<label>Result:</label>
+<p id="result"></p>
+</div>
+
+<div class="section">
+<label>Intermediate Steps:</label>
+<div id="steps"></div>
+</div>
+
+</div>
+
+<script>
+updateUI();
+
+/* ---------- UI ---------- */
+function updateUI() {
+    let cipher = document.querySelector('input[name="cipher"]:checked').value;
+    let keyBox = document.getElementById("key");
+
+    if (cipher === "caesar") {
+        document.getElementById("keyLabel").innerText = "Shift (Default = 3)";
+        keyBox.value = "3";
+        keyBox.disabled = true;
+    }
+    else if (cipher === "playfair") {
+        document.getElementById("keyLabel").innerText = "Key (Matrix Word)";
+        keyBox.value = "";
+        keyBox.disabled = false;
+    }
+    else {
+        document.getElementById("keyLabel").innerText =
+            "2×2 Matrix Values (a b c d)";
+        keyBox.value = "";
+        keyBox.disabled = false;
+    }
+}
+
+/* ---------- MAIN ---------- */
+function encrypt() { processCipher(true); }
+function decrypt() { processCipher(false); }
+
+function processCipher(isEncrypt) {
+    let text = document.getElementById("text").value
+        .toUpperCase().replace(/[^A-Z]/g,"");
+    let key = document.getElementById("key").value;
+    let cipher = document.querySelector('input[name="cipher"]:checked').value;
+
+    let output = { result:"", steps:"" };
+
+    if (cipher === "caesar")
+        output = caesar(text, isEncrypt);
+    else if (cipher === "playfair")
+        output = playfair(text, key, isEncrypt);
+    else
+        output = hill(text, key, isEncrypt);
+
+    document.getElementById("result").innerText = output.result;
+    document.getElementById("steps").innerText = output.steps;
+}
+
+/* ---------- CAESAR ---------- */
+function caesar(text, isEncrypt) {
+    let shift = 3;
+    if (!isEncrypt) shift = 26 - shift;
+
+    let r="", steps="Shift = 3\n\n";
+    for (let c of text) {
+        let v = c.charCodeAt(0) - 65;
+        let nv = (v + shift) % 26;
+        let nc = String.fromCharCode(nv + 65);
+
+        steps += `${c}  :   (${v} + 3) mod 26 = ${nv}  :  ${nc}\n`;
+        r += nc;
+    }
+    return { result: r, steps };
+}
+
+/* ---------- PLAYFAIR ---------- */
+function playfair(text, key, isEncrypt) {
+    key = key.replace(/J/g, "I");
+    text = text.replace(/J/g, "I");
+
+    // -------------- Preprocessing --------------
+    let processed = "";
+    for (let i = 0; i < text.length; i += 2) {
+        let a = text[i];
+        let b = text[i + 1] || "X"; // if no second letter, add X
+
+        if (a === b) {
+            b = "X"; // insert X between double letters
+            i--; // move back by 1 to process b in next iteration
+        }
+
+        processed += a + b;
+    }
+    if (processed.length % 2 !== 0) processed += "X"; // make even length
+    text = processed;
+
+    // ---------- Create Matrix ----------
+    let matrix = createMatrix(key);
+    let result = "";
+    let steps = "Playfair Matrix:\n";
+
+    // Print matrix
+    for (let i = 0; i < 5; i++) {
+        steps += matrix[i].join(" ") + "\n";
+    }
+
+    steps += "\nDigraph Steps:\n";
+
+    let shift = isEncrypt ? 1 : 4;
+
+    // ---------- Encryption ----------
+    for (let i = 0; i < text.length; i += 2) {
+        let a = text[i];
+        let b = text[i + 1];
+
+        let p1 = find(a, matrix);
+        let p2 = find(b, matrix);
+
+        let c1, c2;
+
+        // Same row
+        if (p1[0] === p2[0]) {
+            c1 = matrix[p1[0]][(p1[1] + shift) % 5];
+            c2 = matrix[p2[0]][(p2[1] + shift) % 5];
+        }
+        // Same column
+        else if (p1[1] === p2[1]) {
+            c1 = matrix[(p1[0] + shift) % 5][p1[1]];
+            c2 = matrix[(p2[0] + shift) % 5][p2[1]];
+        }
+        // Rectangle rule
+        else {
+            c1 = matrix[p1[0]][p2[1]];
+            c2 = matrix[p2[0]][p1[1]];
+        }
+
+        result += c1 + c2;
+
+        steps += `${a}${b} → (${p1[0]},${p1[1]}) (${p2[0]},${p2[1]}) → ${c1}${c2}\n`;
+    }
+
+    return { result, steps };
+}
+
+
+function createMatrix(key) {
+    let a="ABCDEFGHIKLMNOPQRSTUVWXYZ", s="";
+    for(let c of key+a) if(!s.includes(c)) s+=c;
+    return [...Array(5)].map((_,i)=>s.slice(i*5,i*5+5).split(""));
+}
+function find(c,m){
+    for(let i=0;i<5;i++)
+        for(let j=0;j<5;j++)
+            if(m[i][j]===c) return [i,j];
+}
+
+/* ---------- HILL (2×2) ---------- */
+function hill(text, key, isEncrypt) {
+    let nums = key.split(" ").map(Number);
+
+    if (nums.length !== 4)
+        return { result: "", steps: "Enter exactly 4 numbers for 2×2 matrix" };
+
+    if (!isEncrypt) {
+        nums = inverse2x2(nums);
+        if (!nums)
+            return { result: "", steps: "Matrix not invertible" };
+    }
+
+    if (text.length % 2 !== 0)
+        text += "X";
+
+    let result = "";
+    let steps = "Matrix:\n";
+    steps += `${nums[0]} ${nums[1]}\n${nums[2]} ${nums[3]}\n\n`;
+
+    for (let i = 0; i < text.length; i += 2) {
+        let a = text[i];
+        let b = text[i + 1];
+
+        let x1 = a.charCodeAt(0) - 65;
+        let x2 = b.charCodeAt(0) - 65;
+
+        let y1 = (nums[0] * x1 + nums[1] * x2) % 26;
+        let y2 = (nums[2] * x1 + nums[3] * x2) % 26;
+
+        let c1 = String.fromCharCode(y1 + 65);
+        let c2 = String.fromCharCode(y2 + 65);
+
+        steps += `${a}${b} → (${x1},${x2}) → (${y1},${y2}) → ${c1}${c2}\n`;
+        result += c1 + c2;
+    }
+
+    return { result, steps };
+}
+
+function inverse2x2(m){
+    let[a,b,c,d]=m;
+    let det=(a*d-b*c)%26;
+    let inv=modInv(det,26);
+    if(!inv) return null;
+    return[(d*inv)%26,(-b*inv)%26,(-c*inv)%26,(a*inv)%26];
+}
+function modInv(a,m){
+    a=(a%m+m)%m;
+    for(let i=1;i<m;i++) if((a*i)%m===1) return i;
+    return null;
+}
+</script>
+
+</body>
+</html>

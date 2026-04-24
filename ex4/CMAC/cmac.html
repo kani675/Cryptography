@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AES CMAC Step by Step</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #87CEEB;
+            padding: 20px;
+        }
+        .box {
+            max-width: 950px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        textarea, input {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+        }
+        button {
+            width: 100%;
+            margin-top: 10px;
+            padding: 10px;
+            background: #007acc;
+            color: white;
+            border: none;
+        }
+        pre {
+            background: #f4faff;
+            padding: 10px;
+            height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>AES CMAC Step by Step</h2>
+
+    <textarea id="msg">hello</textarea>
+    <input id="key" value="abcdefghijklmnop">
+
+    <button onclick="run()">Run</button>
+
+    <pre id="out"></pre>
+</div>
+
+<script>
+// --- SIMPLE AES SUBSTITUTE (demo only) ---
+function xor(a,b){
+    return a.map((x,i)=>x^b[i]);
+}
+
+function pad(block){
+    let out = block.slice();
+    out.push(0x80);
+    while(out.length < 16) out.push(0);
+    return out;
+}
+
+// Dummy AES block (simplified for demonstration)
+function aes_block(block,key,log){
+    log("\n--- AES BLOCK ---");
+    log("Input: " + hex(block));
+
+    let state = xor(block,key);
+    log("After AddRoundKey: " + hex(state));
+
+    // simplified rounds (not full AES for simplicity)
+    for(let i=0;i<3;i++){
+        state = state.map(x => (x ^ 0x63) & 0xFF);
+        log("Round "+(i+1)+": " + hex(state));
+    }
+
+    return state;
+}
+
+function leftShift(arr){
+    let res = new Array(16).fill(0);
+    let carry = 0;
+    for(let i=15;i>=0;i--){
+        res[i] = ((arr[i]<<1)&0xFF) | carry;
+        carry = (arr[i]>>7)&1;
+    }
+    return res;
+}
+
+function hex(arr){
+    return arr.map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+function run(){
+    let out="";
+    const log=(m)=> out+=m+"\n";
+
+    let msg = new TextEncoder().encode(document.getElementById("msg").value);
+    let key = new TextEncoder().encode(document.getElementById("key").value);
+
+    key = Array.from(key.slice(0,16));
+    while(key.length<16) key.push(0);
+
+    let data = Array.from(msg);
+
+    log("Message: " + hex(data));
+    log("Key: " + hex(key));
+
+    // --- Subkey Generation ---
+    let zero = new Array(16).fill(0);
+    let L = aes_block(zero,key,log);
+
+    log("\nSubkey Generation:");
+    log("L = " + hex(L));
+
+    let K1 = leftShift(L);
+    if(L[0]&0x80) K1[15] ^= 0x87;
+
+    log("K1 = " + hex(K1));
+
+    let K2 = leftShift(K1);
+    if(K1[0]&0x80) K2[15] ^= 0x87;
+
+    log("K2 = " + hex(K2));
+
+    // --- Blocks ---
+    let blocks=[];
+    for(let i=0;i<data.length;i+=16){
+        blocks.push(data.slice(i,i+16));
+    }
+    if(blocks.length===0) blocks=[[]];
+
+    log("\nBlocks:");
+    blocks.forEach((b,i)=> log("Block "+i+": "+hex(b)));
+
+    let last;
+    if(blocks[blocks.length-1].length===16){
+        last = xor(blocks[blocks.length-1],K1);
+        log("\nComplete block XOR K1");
+    }else{
+        let padded = pad(blocks[blocks.length-1]);
+        log("\nPadded: "+hex(padded));
+        last = xor(padded,K2);
+    }
+
+    log("Final Block: " + hex(last));
+
+    let X = new Array(16).fill(0);
+    log("\nInitial X: " + hex(X));
+
+    for(let i=0;i<blocks.length-1;i++){
+        log("\nProcessing Block "+i);
+        X = aes_block(xor(X,blocks[i]),key,log);
+    }
+
+    log("\nFinal Step:");
+    let T = aes_block(xor(X,last),key,log);
+
+    log("\nCMAC Tag: " + hex(T));
+
+    document.getElementById("out").textContent = out;
+}
+</script>
+
+</body>
+</html>
