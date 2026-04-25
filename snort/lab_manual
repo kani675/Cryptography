@@ -1,0 +1,170 @@
+# Snort Lab Record
+
+## Basics of Snort
+
+Snort is an open-source Network Intrusion Detection System (NIDS) and Intrusion Prevention System (IPS) used to monitor and analyze network traffic in real time. It plays a crucial role in network security by detecting malicious activities such as unauthorized access, port scanning, denial-of-service attacks, and malware communication.
+
+Snort works by capturing packets flowing through a network and comparing them against a predefined set of rules created by administrators. These rules define patterns of known attacks or suspicious behavior.
+
+Based on its configuration, Snort can operate in three main modes:
+
+* Sniffer Mode – reads and displays packets
+* Packet Logger Mode – stores packets for later analysis
+* Intrusion Detection Mode – analyzes traffic and generates alerts
+
+Its flexibility, rule-based detection mechanism, and real-time monitoring capabilities make it widely used in both academic and enterprise environments.
+
+---
+
+## Working of Snort
+
+Snort follows a structured pipeline architecture:
+
+1. Packet Capture
+   Captures packets from a live interface (e.g., `eth0`) or PCAP file
+
+2. Packet Decoder
+   Converts raw packets into readable protocol formats (TCP, UDP, ICMP)
+
+3. Preprocessors
+
+   * IP defragmentation
+   * TCP stream reassembly
+   * Protocol normalization
+   * Detect anomalies (e.g., port scans)
+
+4. Detection Engine
+   Matches packets against predefined rules
+
+5. Output Module
+   Displays alerts or logs data for analysis
+
+---
+
+## Key Points
+
+* Captures packets from live interface or PCAP files
+* Decodes raw packets into structured formats
+* Uses preprocessors for normalization and anomaly detection
+* Detection engine matches traffic with rule sets
+* Rules include IP, port, protocol, and content
+* Generates alerts on suspicious activity
+* Logs data for further analysis
+* Supports inline mode to block traffic
+* Uses unique rule identifiers (SID)
+* Can integrate with external monitoring tools
+
+---
+
+## Experiments and Commands
+
+### 1. Read packets from network interface
+
+```bash
+sudo snort -i eth0 -A console
+```
+
+### 2. Read packets from a PCAP file
+
+```bash
+sudo snort -r file.pcap -A console
+```
+
+### 3. Test Snort Configuration
+
+```bash
+sudo snort -T -c /etc/snort/snort.conf
+```
+
+### 4. Capture and write packets
+
+```bash
+sudo snort -i eth0 -c /etc/snort/snort.conf -l .
+```
+
+### 5. Create a simple test rule
+
+```bash
+alert icmp any any -> any any (msg:"ICMP Test"; sid:1000001;)
+```
+
+### 6. Print alerts to console
+
+```bash
+sudo snort -A console -q -c /etc/snort/snort.conf -i eth0
+```
+
+### 7. Limit traffic inspection
+
+```bash
+sudo snort -i eth0 -c /etc/snort/snort.conf -A console -n 10
+```
+
+### 8. Perform scanning using nmap
+
+```bash
+nmap -sS <target_ip>
+```
+
+### 9. Detect scan attacks
+
+Add rules for:
+
+* SYN scan
+* UDP scan
+* FIN scan
+* NULL scan
+* XMAS scan
+  (in `local.rules`)
+
+### 10. Run Snort in IDS mode
+
+```bash
+sudo snort -c /etc/snort/snort.conf -i eth0
+```
+
+### 11. Detect ICMP to 8.8.8.8
+
+Rule:
+
+```bash
+alert icmp any any -> 8.8.8.8 any (msg:"ICMP to Google DNS"; sid:1000002;)
+```
+
+Run:
+
+```bash
+sudo snort -i eth0 -c /etc/snort/snort.conf -A console
+```
+
+### 12. Detect HTTP GET request
+
+```bash
+alert tcp any any -> any 80 (msg:"HTTP GET"; content:"GET"; sid:1000003;)
+```
+
+### 13. Detect suspicious User-Agent
+
+```bash
+alert tcp any any -> any 80 (msg:"Suspicious UA"; content:"curl"; sid:1000011;)
+```
+
+### 14. Detect SQL Injection attempt
+
+```bash
+alert tcp any any -> any 80 (msg:"SQL Injection"; content:"' OR 1=1"; sid:1000012;)
+```
+
+### 15. Detect suspicious DNS query
+
+```bash
+alert udp any any -> any 53 (msg:"DNS Query"; content:"malicious"; sid:1000013;)
+```
+
+---
+
+## Conclusion
+
+Snort is a powerful and flexible tool for real-time network monitoring and intrusion detection. With its rule-based system and modular architecture, it enables effective detection and analysis of network threats.
+
+---
